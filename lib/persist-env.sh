@@ -20,7 +20,7 @@ _persist_env_powershell_set() {
     export _CLASH_PERSIST_KEY="$key"
     export _CLASH_PERSIST_VALUE="$value"
     powershell.exe -NoProfile -Command \
-        '[Environment]::SetEnvironmentVariable($env:_CLASH_PERSIST_KEY, $env:_CLASH_PERSIST_VALUE, "User")' 2>/dev/null
+        "[Environment]::SetEnvironmentVariable(\$env:_CLASH_PERSIST_KEY, \$env:_CLASH_PERSIST_VALUE, 'User')" 2>/dev/null
     unset _CLASH_PERSIST_KEY _CLASH_PERSIST_VALUE
 }
 
@@ -29,7 +29,7 @@ _persist_env_powershell_clear() {
     _validate_proxy_env_key "$key" || return 1
     export _CLASH_PERSIST_KEY="$key"
     powershell.exe -NoProfile -Command \
-        '[Environment]::SetEnvironmentVariable($env:_CLASH_PERSIST_KEY, $null, "User")' 2>/dev/null
+        "[Environment]::SetEnvironmentVariable(\$env:_CLASH_PERSIST_KEY, \$null, 'User')" 2>/dev/null
     unset _CLASH_PERSIST_KEY
 }
 
@@ -38,7 +38,7 @@ _persist_env_powershell_get() {
     _validate_proxy_env_key "$key" || return 1
     export _CLASH_PERSIST_KEY="$key"
     powershell.exe -NoProfile -Command \
-        '[Environment]::GetEnvironmentVariable($env:_CLASH_PERSIST_KEY, "User")' 2>/dev/null | tr -d '\r'
+        "[Environment]::GetEnvironmentVariable(\$env:_CLASH_PERSIST_KEY, 'User')" 2>/dev/null | tr -d '\r'
     unset _CLASH_PERSIST_KEY
 }
 

@@ -112,7 +112,11 @@ _proxy_cli() {
     case "$cmd" in
         on)
             if [[ "$git_only" -eq 1 ]]; then
-                proxy_on $([[ "$global_flag" -eq 1 ]] && echo --global) --git-only
+                if [[ "$global_flag" -eq 1 ]]; then
+                    proxy_on --global --git-only
+                else
+                    proxy_on --git-only
+                fi
             elif [[ "$global_flag" -eq 1 ]]; then
                 proxy_on --global
             else
@@ -137,7 +141,11 @@ _proxy_cli() {
             ;;
         toggle)
             if [[ "$git_only" -eq 1 ]]; then
-                proxy_toggle $([[ "$global_flag" -eq 1 ]] && echo --global) --git-only
+                if [[ "$global_flag" -eq 1 ]]; then
+                    proxy_toggle --global --git-only
+                else
+                    proxy_toggle --git-only
+                fi
             elif [[ "$global_flag" -eq 1 ]]; then
                 proxy_toggle --global
             else
