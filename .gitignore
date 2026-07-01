@@ -1,0 +1,21 @@
+# Local overrides (may contain secrets or machine-specific settings)
+config.env.local
+
+# Backup files created by install/uninstall
+*.bak
+*.bak.clash-proxy-*
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+*.tmp
+
+# State (user-local, not part of repo)
+.local/

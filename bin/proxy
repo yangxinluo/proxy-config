@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Clash for Windows proxy CLI — works in Git Bash and WSL2.
+
+set -euo pipefail
+
+_resolve_root() {
+    if [[ -n "${CLASH_PROXY_ROOT:-}" && -f "${CLASH_PROXY_ROOT}/config.env" ]]; then
+        return 0
+    fi
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CLASH_PROXY_ROOT="$(cd "${script_dir}/.." && pwd)"
+    export CLASH_PROXY_ROOT
+}
+
+_load_config() {
+    local config_file="${CLASH_PROXY_ROOT}/config.env"
+    if [[ ! -f "$config_file" ]]; then
+        echo "error: config not found at ${config_file}" >&2
+        return 1
+    fi
+    # shellcheck disable=SC1090
+    source "$config_file"
+    export HTTP_PORT SOCKS_PORT NO_PROXY GIT_USE_HTTP STATE_DIR HOST
+}
+
+_main() {
+    _resolve_root
+    _load_config
+
+    # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/detect-host.sh"
+    # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/git-proxy.sh"
+    # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/proxy-core.sh"
+
+    local cmd="${1:-status}"
+    shift || true
+
+    case "$cmd" in
+        on)
+            local git_only=""
+            if [[ "${1:-}" == "--git-only" ]]; then
+                git_only="--git-only"
+            fi
+            proxy_on $git_only
+            ;;
+        off)
+            local git_only=""
+            if [[ "${1:-}" == "--git-only" ]]; then
+                git_only="--git-only"
+            fi
+            proxy_off $git_only
+            ;;
+        status)
+            proxy_status
+            ;;
+        *)
+            echo "usage: proxy {on|off|status} [--git-only]" >&2
+            return 1
+            ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    _main "$@"
+fi

@@ -1,0 +1,7 @@
+# >>> clash-proxy >>>
+export CLASH_PROXY_ROOT="__CLASH_PROXY_ROOT__"
+export PATH="${CLASH_PROXY_ROOT}/bin:${PATH}"
+proxy() {
+    "${CLASH_PROXY_ROOT}/bin/proxy" "$@"
+}
+# <<< clash-proxy <<<

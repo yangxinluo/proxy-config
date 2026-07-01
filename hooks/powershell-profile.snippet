@@ -1,0 +1,6 @@
+# >>> clash-proxy >>>
+if ($env:CLASH_PROXY_ROOT) {
+    $proxyScript = Join-Path $env:CLASH_PROXY_ROOT 'bin\proxy.ps1'
+    if (Test-Path $proxyScript) { . $proxyScript }
+}
+# <<< clash-proxy <<<
