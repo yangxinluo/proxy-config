@@ -12,9 +12,26 @@ Installing `proxy-config` makes **local, user-scoped** changes on your machine:
 | Git Bash `~/.bashrc` | Appends a marked hook block |
 | WSL `~/.bashrc` | Appends a marked hook block (with optional backup) |
 
-Running `proxy on` (full mode) or `proxy on --git-only` / `proxy on -GitOnly` modifies **Git global config** (`git config --global`) for `http.proxy` and `https.proxy` when `GIT_USE_HTTP=1` in `config.env`.
+### Default session mode (`proxy on`)
 
-Uninstall scripts remove the marked blocks and PATH/env entries. They do **not** delete entire profile files when only the hook block remains.
+- Sets proxy environment variables **only in the current terminal session**
+- Sets `GIT_HTTP_PROXY` / `GIT_HTTPS_PROXY` in the current session (does **not** modify `git config --global`)
+- Does **not** write User-level proxy environment variables or a state file
+
+### Global mode (`proxy on -g` / `--global` / `-Global`)
+
+When you explicitly opt in to global persistence:
+
+| Target | Change |
+|--------|--------|
+| User env vars | Sets `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY` (and lowercase aliases) at User scope |
+| WSL `~/.bashrc` | Appends a marked `# >>> clash-proxy-env >>>` export block (with backup on update/remove) |
+| Git global config | Sets `git config --global` `http.proxy` and `https.proxy` when `GIT_USE_HTTP=1` |
+| State file | Writes `~/.local/state/clash-proxy/state` with `scope=global` |
+
+Use `proxy off` to clear session settings; if global mode was active (or `-g` is passed), persistent layers are removed as well.
+
+Uninstall scripts remove the marked hook blocks and PATH/`CLASH_PROXY_ROOT` entries. They do **not** delete entire profile files when only the hook block remains. Global proxy env vars and WSL env blocks are cleared by `proxy off` when global mode was enabled; uninstall does not automatically remove them if left enabled.
 
 ## What this project does NOT do
 
@@ -31,7 +48,7 @@ Uninstall scripts remove the marked blocks and PATH/env entries. They do **not**
 http://www.gstatic.com/generate_204
 ```
 
-This sends a single HTTP request to Google’s static content endpoint to verify the proxy path works. It does not transmit personal data from this repository. If you prefer not to hit external URLs, avoid `proxy status` or disable curl on your system (the check is skipped when `curl` is unavailable).
+This sends a single HTTP request to Google's static content endpoint to verify the proxy path works. It does not transmit personal data from this repository. If you prefer not to hit external URLs, avoid `proxy status` or disable curl on your system (the check is skipped when `curl` is unavailable).
 
 ## Local secrets
 

@@ -276,7 +276,8 @@ Write-Host 'Install complete.' -ForegroundColor Green
 Write-Host ''
 Write-Host 'Verification (open a NEW terminal window):' -ForegroundColor Yellow
 Write-Host '  proxy status'
-Write-Host '  proxy on'
+Write-Host '  proxy on               # session only (current window)'
+Write-Host '  proxy on -g            # persistent (User env + git global)'
 Write-Host '  proxy off'
 Write-Host '  proxy on --git-only    # Git Bash / cmd via proxy.cmd'
 Write-Host '  proxy on -GitOnly      # PowerShell'

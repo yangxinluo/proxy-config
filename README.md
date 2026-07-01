@@ -6,7 +6,7 @@
 
 ## 概述
 
-本目录 (`proxy-config`) 提供一套轻量级脚本，用于在开发环境中按需开启或关闭代理。支持四种使用模式：完整代理（环境变量 + Git）、仅 Git 代理、以及对应 Shell 下的关闭与状态查询。
+本目录 (`proxy-config`) 提供一套轻量级脚本，用于在开发环境中按需开启或关闭代理。默认 **`proxy on` 仅当前终端窗口生效**；加 **`-g` / `--global`** 则在 Bash、WSL、PowerShell、cmd 全平台持久化环境变量与 Git 配置。
 
 安装脚本会自动检测当前目录，**无需硬编码路径**。
 
@@ -36,9 +36,30 @@ Windows 上存在 **两套独立的 PowerShell**，各自有独立的 `$PROFILE`
 
 **推荐：** 在 **Windows PowerShell 5.1** 中运行 `.\install.ps1`（默认终端 / cmd 调用 `powershell.exe` 时使用）。安装脚本会**同时**向上述两个 profile 路径写入 hook（若目录不存在则创建），确保无论您使用哪种 PowerShell 都能加载 `proxy` 命令。
 
-## Git 全局配置警告
+## 作用域（session vs global）
 
-`proxy on`（完整模式）及 `proxy on --git-only` / `proxy on -GitOnly` 在 `GIT_USE_HTTP=1`（默认）时会修改 **`git config --global`** 的 `http.proxy` 与 `https.proxy`。这会影响本机所有 Git 仓库的出站 HTTP/HTTPS 流量。使用 `proxy off` 可清除这些设置。
+| 命令 | 环境变量 | Git | 持久层 |
+|------|----------|-----|--------|
+| `proxy on`（默认） | 当前 shell | `GIT_HTTP_PROXY` 会话 env | 无 |
+| `proxy on -g` | User env + 当前 shell | `git config --global` | User env + WSL bashrc 块 + state |
+| `proxy on --git-only` | 无 | `GIT_HTTP_PROXY` 会话 env | 无 |
+| `proxy on -g --git-only` | 无 | `git config --global` | git global + state |
+| `proxy off` | 清当前 shell | 清会话 Git env | 若 state 为 global 则清全部持久层 |
+| `proxy off -g` | 清 User env + 当前 shell | 清 git global | 清 WSL 块 + state |
+
+| Shell | 长选项 | 短选项 |
+|-------|--------|--------|
+| Bash / Git Bash / WSL | `--global` | `-g` |
+| PowerShell | `-Global` | `-g` |
+| cmd | `--global` | `-g` |
+
+**cmd 说明：** 默认 `proxy on` 通过 `proxy-session.cmd` 在当前 cmd 进程内 `set` 变量；`proxy on -g` 写入 User env，**新开 cmd 窗口**即生效。
+
+## Git 配置说明
+
+默认 `proxy on` **不会**修改 `git config --global`，仅设置当前会话的 `GIT_HTTP_PROXY` / `GIT_HTTPS_PROXY`。
+
+`proxy on -g`（或 `proxy on -g --git-only`）在 `GIT_USE_HTTP=1`（默认）时会修改 **`git config --global`** 的 `http.proxy` 与 `https.proxy`，影响本机所有 Git 仓库的出站 HTTP/HTTPS 流量。使用 `proxy off` 可清除（global 状态下会清尽持久层）。
 
 ## 健康检查说明
 
@@ -61,11 +82,15 @@ proxy-config/
 ├── bin/
 │   ├── proxy               # Bash CLI（Git Bash / WSL2）
 │   ├── proxy.ps1           # PowerShell CLI
-│   └── proxy.cmd           # cmd.exe 包装器
+│   ├── proxy.cmd           # cmd.exe 包装器（-g 走 User env）
+│   ├── proxy-session.cmd   # cmd 会话模式 on
+│   └── proxy-session-off.cmd # cmd 会话模式 off
 ├── lib/                    # Bash 共享库
 │   ├── detect-host.sh      # 平台与主机检测
-│   ├── git-proxy.sh        # Git 代理配置
-│   └── proxy-core.sh       # 核心 on/off/status 逻辑
+│   ├── git-proxy.sh        # Git 会话 + global 代理
+│   ├── persist-env.sh      # User env + WSL bashrc 持久化
+│   ├── proxy-core.sh       # 核心 on/off/status 逻辑
+│   └── proxy-invoke.sh     # 可 source 的 CLI 入口
 ├── hooks/                  # Shell 配置文件片段（由安装脚本写入）
 │   ├── bashrc.snippet      # Git Bash
 │   ├── profile.snippet     # WSL2
@@ -78,16 +103,16 @@ proxy-config/
 └── README.en.md            # English documentation
 ```
 
-## 四种使用模式
+## 使用模式
 
 | 模式 | Shell | 命令 | 效果 |
 |------|-------|------|------|
-| 完整代理 (Bash) | Git Bash / WSL2 | `proxy on` | 设置环境变量 + Git 代理 |
-| 仅 Git (Bash) | Git Bash / WSL2 | `proxy on --git-only` | 仅配置 Git 代理 |
-| 完整代理 (PS) | PowerShell | `proxy on` | 设置环境变量 + Git 代理 |
-| 仅 Git (PS) | PowerShell | `proxy on -GitOnly` | 仅配置 Git 代理 |
+| 会话完整代理 | Git Bash / WSL2 / PS | `proxy on` | 当前窗口 env + Git 会话 env |
+| 持久完整代理 | 全平台 | `proxy on -g` | User env + git global + 当前窗口 |
+| 会话仅 Git | Bash / PS | `proxy on --git-only` | 仅 `GIT_HTTP_PROXY` 会话 env |
+| 持久仅 Git | 全平台 | `proxy on -g --git-only` | 仅 git global |
 
-关闭代理：`proxy off`（或 `proxy off --git-only` / `proxy off -GitOnly`）。
+关闭代理：`proxy off`（global 状态下清尽持久层；或 `proxy off -g` 强制清 global）。
 
 ## 安装
 
@@ -129,12 +154,15 @@ cd /path/to/proxy-config
 ```powershell
 proxy status
 proxy on
+proxy on -g
 proxy off
 proxy on -GitOnly
 ```
 
 ```bash
 proxy status
+proxy on
+proxy on -g
 proxy on --git-only
 ```
 
@@ -186,9 +214,10 @@ git config --global --get http.proxy
 
 ```bash
 proxy on
+proxy on -g
 proxy on --git-only
 proxy off
-proxy off --git-only
+proxy off -g
 proxy status
 ```
 
@@ -196,9 +225,10 @@ proxy status
 
 ```powershell
 proxy on
+proxy on -g
 proxy on -GitOnly
 proxy off
-proxy off -GitOnly
+proxy off -Global
 proxy status
 ```
 
@@ -211,7 +241,11 @@ proxy status
 | NO_PROXY | localhost, 私有网段 | 不走代理的地址列表 |
 | HOST | （自动检测） | 强制指定 Clash 主机（WSL2 通常为 Windows IP） |
 | GIT_USE_HTTP | 1 | 开启代理时是否配置 git http/https 代理 |
-| STATE_DIR | ~/.local/state/clash-proxy | 持久化当前模式 |
+| STATE_DIR | ~/.local/state/clash-proxy | global 模式下持久化 scope=global |
+
+## 状态文件
+
+**仅 `proxy on -g` 时**写入 `~/.local/state/clash-proxy/state`，含 `scope=global` 与 `mode=full|git-only`。默认会话模式不写状态文件。`proxy off` 在 global 状态下清除。
 
 ### 主机检测规则
 
@@ -243,10 +277,6 @@ proxy status
 - 确认代理客户端正在运行，且端口与 `config.env` 一致。
 - 检查防火墙是否允许本地 `7890`/`7891` 端口连接。
 - 健康检查会访问 `http://www.gstatic.com/generate_204`；离线或阻断外网时可能显示 unreachable。
-
-## 状态文件
-
-启用代理后，模式保存在 `~/.local/state/clash-proxy/state`，内容为 `mode=full` 或 `mode=git-only`。执行 `proxy off` 后清除。
 
 ## 许可证
 

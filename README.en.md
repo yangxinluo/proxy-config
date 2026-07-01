@@ -6,7 +6,7 @@ Unified proxy scripts for **Git Bash**, **WSL2**, **PowerShell**, **cmd**, and *
 
 ## Overview
 
-This directory (`proxy-config`) provides lightweight scripts to enable or disable proxy settings on demand in your development environment. Four usage modes are supported: full proxy (env vars + Git), git-only proxy, plus off and status commands per shell.
+This directory (`proxy-config`) provides lightweight scripts to enable or disable proxy settings on demand. By default **`proxy on` affects only the current terminal**; add **`-g` / `--global`** to persist env vars and Git config across Bash, WSL, PowerShell, and cmd.
 
 The installer detects its own directory automatically — **no hardcoded paths** required.
 
@@ -36,9 +36,30 @@ Windows has **two separate PowerShell installations**, each with its own `$PROFI
 
 **Recommendation:** Run `.\install.ps1` from **Windows PowerShell 5.1** (used by default from cmd via `powershell.exe`). The installer writes hooks to **both** profile paths (creating directories/files if needed) so `proxy` works in either shell.
 
-## Git global config warning
+## Scope (session vs global)
 
-`proxy on` (full mode) and `proxy on --git-only` / `proxy on -GitOnly` modify **`git config --global`** `http.proxy` and `https.proxy` when `GIT_USE_HTTP=1` (default). This affects Git HTTP/HTTPS traffic for all repositories on the machine. Use `proxy off` to clear these settings.
+| Command | Env vars | Git | Persistence |
+|---------|----------|-----|---------------|
+| `proxy on` (default) | Current shell | `GIT_HTTP_PROXY` session env | None |
+| `proxy on -g` | User env + current shell | `git config --global` | User env + WSL bashrc block + state |
+| `proxy on --git-only` | None | `GIT_HTTP_PROXY` session env | None |
+| `proxy on -g --git-only` | None | `git config --global` | git global + state |
+| `proxy off` | Clear current shell | Clear session Git env | Clears all persistent layers if state is global |
+| `proxy off -g` | Clear User env + shell | Clear git global | Clear WSL block + state |
+
+| Shell | Long flag | Short flag |
+|-------|-----------|------------|
+| Bash / Git Bash / WSL | `--global` | `-g` |
+| PowerShell | `-Global` | `-g` |
+| cmd | `--global` | `-g` |
+
+**cmd note:** Default `proxy on` uses `proxy-session.cmd` to `set` vars in the current process; `proxy on -g` writes User env — **new cmd windows** inherit it.
+
+## Git configuration
+
+Default `proxy on` does **not** modify `git config --global`; it sets `GIT_HTTP_PROXY` / `GIT_HTTPS_PROXY` for the current session only.
+
+`proxy on -g` (or `proxy on -g --git-only`) modifies **`git config --global`** `http.proxy` and `https.proxy` when `GIT_USE_HTTP=1` (default), affecting all Git HTTP/HTTPS traffic on the machine. Use `proxy off` to clear (global state removes all persistent layers).
 
 ## Health check disclaimer
 
@@ -61,11 +82,15 @@ proxy-config/
 ├── bin/
 │   ├── proxy               # Bash CLI (Git Bash / WSL2)
 │   ├── proxy.ps1           # PowerShell CLI
-│   └── proxy.cmd           # cmd.exe wrapper
+│   ├── proxy.cmd           # cmd.exe wrapper (-g uses User env)
+│   ├── proxy-session.cmd   # cmd session on
+│   └── proxy-session-off.cmd # cmd session off
 ├── lib/                    # Shared bash libraries
 │   ├── detect-host.sh      # Platform and host detection
-│   ├── git-proxy.sh        # Git proxy configuration
-│   └── proxy-core.sh       # Core on/off/status logic
+│   ├── git-proxy.sh        # Git session + global helpers
+│   ├── persist-env.sh      # User env + WSL bashrc persistence
+│   ├── proxy-core.sh       # Core on/off/status logic
+│   └── proxy-invoke.sh     # Sourceable CLI entry
 ├── hooks/                  # Shell profile snippets (installed by scripts)
 │   ├── bashrc.snippet      # Git Bash
 │   ├── profile.snippet     # WSL2
@@ -78,16 +103,16 @@ proxy-config/
 └── README.en.md            # English documentation (this file)
 ```
 
-## Four usage modes
+## Usage modes
 
 | Mode | Shell | Command | Effect |
 |------|-------|---------|--------|
-| Full (Bash) | Git Bash / WSL2 | `proxy on` | Env vars + git config |
-| Git-only (Bash) | Git Bash / WSL2 | `proxy on --git-only` | Git config only |
-| Full (PS) | PowerShell | `proxy on` | Env vars + git config |
-| Git-only (PS) | PowerShell | `proxy on -GitOnly` | Git config only |
+| Session full | Git Bash / WSL2 / PS | `proxy on` | Current-window env + Git session env |
+| Global full | All platforms | `proxy on -g` | User env + git global + current window |
+| Session git-only | Bash / PS | `proxy on --git-only` | `GIT_HTTP_PROXY` session env only |
+| Global git-only | All platforms | `proxy on -g --git-only` | git global only |
 
-Turn off with `proxy off` (or `proxy off --git-only` / `proxy off -GitOnly`).
+Turn off with `proxy off` (clears persistent layers when global was active; or `proxy off -g` to force global cleanup).
 
 ## Installation
 
@@ -129,12 +154,15 @@ cd /path/to/proxy-config
 ```powershell
 proxy status
 proxy on
+proxy on -g
 proxy off
 proxy on -GitOnly
 ```
 
 ```bash
 proxy status
+proxy on
+proxy on -g
 proxy on --git-only
 ```
 
@@ -186,9 +214,10 @@ If `Get-Command proxy` still returns a path, close all old terminal windows and 
 
 ```bash
 proxy on
+proxy on -g
 proxy on --git-only
 proxy off
-proxy off --git-only
+proxy off -g
 proxy status
 ```
 
@@ -196,9 +225,10 @@ proxy status
 
 ```powershell
 proxy on
+proxy on -g
 proxy on -GitOnly
 proxy off
-proxy off -GitOnly
+proxy off -Global
 proxy status
 ```
 
@@ -211,7 +241,11 @@ proxy status
 | NO_PROXY | localhost, private ranges | Bypass list |
 | HOST | (auto) | Force Clash host (WSL2: usually Windows IP) |
 | GIT_USE_HTTP | 1 | Set git http/https proxy when enabling |
-| STATE_DIR | ~/.local/state/clash-proxy | Persists active mode |
+| STATE_DIR | ~/.local/state/clash-proxy | Persists `scope=global` when using `-g` |
+
+## State file
+
+Written **only for `proxy on -g`**, at `~/.local/state/clash-proxy/state` with `scope=global` and `mode=full|git-only`. Default session mode does not write a state file. Cleared on `proxy off` when global was active.
 
 ### Host detection
 
@@ -243,10 +277,6 @@ proxy status
 - Ensure your proxy client is running and ports match config.env.
 - Confirm firewall allows local connections on 7890/7891.
 - The health check hits `http://www.gstatic.com/generate_204`; it may show unreachable when offline or blocked.
-
-## State file
-
-When enabled, mode is stored at `~/.local/state/clash-proxy/state` with `mode=full` or `mode=git-only`. Cleared on `proxy off`.
 
 ## License
 
