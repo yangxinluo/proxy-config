@@ -12,9 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run shellcheck
-        uses: koalaman/shellcheck-action@v0.9.0
-        with:
-          scandir: '.'
+        run: find . -type f -name '*.sh' -not -path './.git/*' -exec shellcheck {} +
 
   bats:
     runs-on: ubuntu-latest
