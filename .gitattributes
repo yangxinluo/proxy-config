@@ -1,0 +1,5 @@
+# Shell scripts must use LF so shellcheck and bash work on Linux CI.
+*.sh text eol=lf
+
+# GitHub Actions workflows
+.github/workflows/* text eol=lf
