@@ -46,6 +46,11 @@ if "%CMD_ARG%"=="off" if "%GLOBAL_FLAG%"=="0" (
     exit /b %ERRORLEVEL%
 )
 
+if "%CMD_ARG%"=="status" if "%GLOBAL_FLAG%"=="0" (
+    call "%CLASH_PROXY_ROOT%\bin\proxy-session-status.cmd"
+    exit /b %ERRORLEVEL%
+)
+
 set "PS_ARGS=%CMD_ARG%"
 if "%GLOBAL_FLAG%"=="1" set "PS_ARGS=%PS_ARGS% -g"
 if "%GIT_ONLY%"=="1" set "PS_ARGS=%PS_ARGS% --git-only"

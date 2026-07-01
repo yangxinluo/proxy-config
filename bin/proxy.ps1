@@ -22,27 +22,32 @@ function Get-ClashProxyRoot {
 function Read-ClashProxyConfig {
     param([string]$Root)
 
+    $defaultsPath = Join-Path $Root 'config.defaults.env'
     $configPath = Join-Path $Root 'config.env'
     if (-not (Test-Path $configPath)) {
         throw "config not found at $configPath"
     }
 
     $config = @{
-        HTTP_PORT    = 7890
-        SOCKS_PORT   = 7891
-        NO_PROXY     = 'localhost,127.0.0.1'
-        HOST         = ''
-        GIT_USE_HTTP = '1'
-        STATE_DIR    = ''
+        HTTP_PORT        = 7890
+        SOCKS_PORT       = 7891
+        NO_PROXY         = 'localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'
+        HOST             = ''
+        GIT_USE_HTTP     = '1'
+        GIT_PROXY_SCHEME = 'http'
+        STATE_DIR        = ''
     }
 
-    foreach ($line in Get-Content $configPath) {
-        $trimmed = $line.Trim()
-        if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
-        if ($trimmed -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            $key = $Matches[1]
-            $value = $Matches[2]
-            $config[$key] = $value
+    foreach ($path in @($defaultsPath, $configPath)) {
+        if (-not (Test-Path $path)) { continue }
+        foreach ($line in Get-Content $path) {
+            $trimmed = $line.Trim()
+            if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+            if ($trimmed -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+                $key = $Matches[1]
+                $value = $Matches[2]
+                $config[$key] = $value
+            }
         }
     }
 
@@ -53,7 +58,26 @@ function Read-ClashProxyConfig {
         $config.STATE_DIR = $config.STATE_DIR -replace '/', '\'
     }
 
+    Test-ClashProxyConfig -Config $config
     return $config
+}
+
+function Test-ClashProxyConfig {
+    param([hashtable]$Config)
+
+    if ($Config.HOST -and $Config.HOST -notmatch '^[A-Za-z0-9.:_-]+$') {
+        throw "invalid HOST '$($Config.HOST)' (allowed: letters, digits, . : _ -)"
+    }
+    foreach ($name in @('HTTP_PORT', 'SOCKS_PORT')) {
+        $port = $Config[$name]
+        if ($port -notmatch '^\d+$') {
+            throw "invalid $name '$port' (must be a number)"
+        }
+        $portNum = [int]$port
+        if ($portNum -lt 1 -or $portNum -gt 65535) {
+            throw "invalid $name '$port' (must be 1-65535)"
+        }
+    }
 }
 
 function Get-ClashProxyHost {
@@ -260,6 +284,26 @@ function Clear-ClashProxyState {
     if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
 }
 
+function Show-ClashProxyGlobalStatus {
+    param([string]$StateDir)
+
+    Get-UserProxyEnvStatus
+
+    $gitHttp = git config --global --get http.proxy 2>$null
+    $gitHttps = git config --global --get https.proxy 2>$null
+    if ($gitHttp -or $gitHttps) {
+        Write-Host '  git global:    on'
+        Write-Host "    http.proxy:  $gitHttp"
+        Write-Host "    https.proxy: $gitHttps"
+    } else {
+        Write-Host '  git global:    off'
+    }
+
+    if (Test-WslPersistEnvBlock) {
+        Write-Host '  WSL env block: present'
+    }
+}
+
 function proxy {
     [CmdletBinding()]
     param(
@@ -428,12 +472,20 @@ if ($MyInvocation.InvocationName -ne '.') {
     $cmd = 'status'
     $gitOnly = $false
     $globalFlag = $false
+    $gitGlobalOnly = $false
     foreach ($arg in $args) {
         switch -Regex ($arg) {
             '^(-GitOnly|--git-only)$' { $gitOnly = $true; continue }
             '^(-g|-Global|--global)$' { $globalFlag = $true; continue }
+            '^--git-global-only$' { $gitGlobalOnly = $true; continue }
             '^(on|off|status)$' { $cmd = $arg; continue }
         }
+    }
+    if ($gitGlobalOnly -and $cmd -eq 'status') {
+        $root = Get-ClashProxyRoot
+        $config = Read-ClashProxyConfig -Root $root
+        Show-ClashProxyGlobalStatus -StateDir $config.STATE_DIR
+        return
     }
     proxy -Command $cmd -Global:$globalFlag -GitOnly:$gitOnly
 }

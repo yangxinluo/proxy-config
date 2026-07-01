@@ -11,9 +11,17 @@ if /i "%~1"=="-GitOnly" set "GIT_ONLY=1"
 
 set "HTTP_PORT=7890"
 set "SOCKS_PORT=7891"
-set "NO_PROXY=localhost,127.0.0.1"
+set "NO_PROXY=localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 set "HOST="
 set "GIT_USE_HTTP=1"
+
+for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%CLASH_PROXY_ROOT%\config.defaults.env") do (
+    if /i "%%a"=="HTTP_PORT" set "HTTP_PORT=%%b"
+    if /i "%%a"=="SOCKS_PORT" set "SOCKS_PORT=%%b"
+    if /i "%%a"=="NO_PROXY" set "NO_PROXY=%%b"
+    if /i "%%a"=="HOST" set "HOST=%%b"
+    if /i "%%a"=="GIT_USE_HTTP" set "GIT_USE_HTTP=%%b"
+)
 
 for /f "usebackq eol=# tokens=1,* delims==" %%a in ("%CLASH_PROXY_ROOT%\config.env") do (
     if /i "%%a"=="HTTP_PORT" set "HTTP_PORT=%%b"

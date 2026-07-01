@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-07-01
+
+### Fixed
+
+- **cmd `proxy status`:** New `bin/proxy-session-status.cmd` reads session env vars from the current cmd process instead of delegating to PowerShell (which could not see `set` values).
+- **Default config drift:** Added `config.defaults.env` as the single source of default values; Bash, PowerShell, and cmd all load it before `config.env`.
+
+### Security
+
+- **PowerShell injection:** `persist-env.sh` now passes User env values via environment variables instead of string interpolation in `-Command`.
+- **Config validation:** Host and port values are validated at startup in Bash (`lib/validate-config.sh`) and PowerShell (`Test-ClashProxyConfig`).
+
 ## [1.1.0] - 2026-07-01
 
 ### Changed
@@ -46,5 +58,6 @@ If you previously ran `proxy on` and want the old persistent behavior, run `prox
 - Default HTTP/SOCKS ports match common Clash setups (7890 / 7891); override in `config.env`
 - Compatible with any local HTTP+SOCKS proxy (Clash Verge, Mihomo, legacy CFW, etc.)
 
+[1.1.1]: https://github.com/example/proxy-config/releases/tag/v1.1.1
 [1.1.0]: https://github.com/example/proxy-config/releases/tag/v1.1.0
 [1.0.0]: https://github.com/example/proxy-config/releases/tag/v1.0.0

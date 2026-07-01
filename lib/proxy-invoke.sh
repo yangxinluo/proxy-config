@@ -13,13 +13,21 @@ _proxy_resolve_root() {
 
 _proxy_load_config() {
     local config_file="${CLASH_PROXY_ROOT}/config.env"
+    local defaults_file="${CLASH_PROXY_ROOT}/config.defaults.env"
+    if [[ -f "$defaults_file" ]]; then
+        # shellcheck disable=SC1090
+        source "$defaults_file"
+    fi
     if [[ ! -f "$config_file" ]]; then
         echo "error: config not found at ${config_file}" >&2
         return 1
     fi
     # shellcheck disable=SC1090
     source "$config_file"
-    export HTTP_PORT SOCKS_PORT NO_PROXY GIT_USE_HTTP STATE_DIR HOST
+    export HTTP_PORT SOCKS_PORT NO_PROXY GIT_USE_HTTP STATE_DIR HOST GIT_PROXY_SCHEME
+    # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/validate-config.sh"
+    validate_clash_proxy_config || return 1
 }
 
 _proxy_source_libs() {
