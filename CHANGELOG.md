@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-01
+
+### Added
+
+- **Multi-profile:** `config.d/<name>.env` overlays via `proxy on --profile <name>` (see `config.d/*.env.example`).
+- **Dev-tool proxy:** Optional `NPM_USE_PROXY`, `PIP_USE_PROXY`, `DOCKER_USE_PROXY`, `APT_USE_PROXY` in config.
+- **WSL mirrored networking:** `detect-host.sh` prefers `127.0.0.1` when mirrored mode or localhost port probe succeeds.
+- **Uninstall purge:** `uninstall.ps1 -PurgeProxyEnv` clears User env, WSL block, git global, tool proxy, and state file.
+
+## [1.3.0] - 2026-07-01
+
+### Added
+
+- **CLI commands:** `proxy help`, `proxy version`, `proxy toggle`, and `proxy status --json`.
+- **Configurable health check:** `HEALTH_CHECK_URL` in `config.env` (empty value skips the probe).
+- **Port probe:** `proxy status` reports TCP connectivity to the HTTP proxy port.
+- **VERSION file:** Single source for `proxy version` output.
+
+## [1.2.0] - 2026-07-01
+
+### Added
+
+- **Git SOCKS proxy:** `GIT_PROXY_SCHEME` config (`http` | `socks5`) selects HTTP or SOCKS URL for git session/global proxy.
+- **Automated tests:** `bats` tests for `validate-config`, `detect-host`, and `git-proxy`; Pester tests for `proxy.ps1` config helpers.
+- **CI:** GitHub Actions workflow with shellcheck, bats (Linux), Pester (Windows), and changelog sanity check.
+
+## [1.1.1] - 2026-07-01
+
+### Fixed
+
+- **cmd `proxy status`:** New `bin/proxy-session-status.cmd` reads session env vars from the current cmd process instead of delegating to PowerShell (which could not see `set` values).
+- **Default config drift:** Added `config.defaults.env` as the single source of default values; Bash, PowerShell, and cmd all load it before `config.env`.
+
+### Security
+
+- **PowerShell injection:** `persist-env.sh` now passes User env values via environment variables instead of string interpolation in `-Command`.
+- **Config validation:** Host and port values are validated at startup in Bash (`lib/validate-config.sh`) and PowerShell (`Test-ClashProxyConfig`).
+
 ## [1.1.0] - 2026-07-01
 
 ### Changed
@@ -46,5 +84,9 @@ If you previously ran `proxy on` and want the old persistent behavior, run `prox
 - Default HTTP/SOCKS ports match common Clash setups (7890 / 7891); override in `config.env`
 - Compatible with any local HTTP+SOCKS proxy (Clash Verge, Mihomo, legacy CFW, etc.)
 
+[1.4.0]: https://github.com/example/proxy-config/releases/tag/v1.4.0
+[1.3.0]: https://github.com/example/proxy-config/releases/tag/v1.3.0
+[1.2.0]: https://github.com/example/proxy-config/releases/tag/v1.2.0
+[1.1.1]: https://github.com/example/proxy-config/releases/tag/v1.1.1
 [1.1.0]: https://github.com/example/proxy-config/releases/tag/v1.1.0
 [1.0.0]: https://github.com/example/proxy-config/releases/tag/v1.0.0

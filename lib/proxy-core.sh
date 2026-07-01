@@ -88,7 +88,7 @@ proxy_on() {
 
         if [[ "$GIT_ONLY" -eq 1 ]]; then
             if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-                git_proxy_on "$http_url"
+                git_proxy_on "$http_url" "$socks_url"
             fi
             _write_state "git-only" "global"
             echo "Clash proxy enabled (git-only, global)"
@@ -99,8 +99,9 @@ proxy_on() {
 
         _set_env_proxies "$http_url" "$socks_url"
         persist_env_on "$http_url" "$socks_url" "$NO_PROXY"
+        tool_proxy_on "$http_url" "$socks_url"
         if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-            git_proxy_on "$http_url"
+            git_proxy_on "$http_url" "$socks_url"
         fi
         _write_state "full" "global"
         echo "Clash proxy enabled (full, global)"
@@ -115,7 +116,7 @@ proxy_on() {
 
     if [[ "$GIT_ONLY" -eq 1 ]]; then
         if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-            git_session_proxy_on "$http_url"
+            git_session_proxy_on "$http_url" "$socks_url"
         fi
         echo "Clash proxy enabled (git-only, session)"
         echo "  Host: ${CLASH_PROXY_HOST}"
@@ -124,8 +125,9 @@ proxy_on() {
     fi
 
     _set_env_proxies "$http_url" "$socks_url"
+    tool_proxy_on "$http_url" "$socks_url"
     if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-        git_session_proxy_on "$http_url"
+        git_session_proxy_on "$http_url" "$socks_url"
     fi
     echo "Clash proxy enabled (full, session)"
     echo "  Platform: ${CLASH_PROXY_PLATFORM}"
@@ -150,6 +152,7 @@ proxy_off() {
 
     _unset_env_proxies
     git_session_proxy_off
+    tool_proxy_off
     unset CLASH_PROXY_SCOPE
 
     _read_state
@@ -162,6 +165,7 @@ proxy_off() {
 
     if [[ "$clear_global" -eq 1 ]]; then
         persist_env_off
+        tool_proxy_off
         git_proxy_off
         _clear_state
         echo "Clash proxy disabled (session + global)"
@@ -205,15 +209,13 @@ proxy_status() {
     persist_env_status
     git_session_proxy_status
     git_proxy_status
+    tool_proxy_status
 
-    if command -v curl >/dev/null 2>&1; then
-        local code
-        code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 \
-            -x "$HTTP_PROXY_URL" "http://www.gstatic.com/generate_204" 2>/dev/null || echo "000")"
-        if [[ "$code" == "204" || "$code" == "200" ]]; then
-            echo "  health:      ok (HTTP ${code})"
-        else
-            echo "  health:      unreachable (HTTP ${code})"
-        fi
+    if _check_tcp_port "$CLASH_PROXY_HOST" "$HTTP_PORT" 2>/dev/null; then
+        echo "  port:        open (TCP ${HTTP_PORT})"
+    else
+        echo "  port:        closed (TCP ${HTTP_PORT})"
     fi
+
+    echo "  health:      $(_proxy_health_check "$HTTP_PROXY_URL")"
 }

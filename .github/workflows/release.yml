@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify semver tag format
+        run: |
+          if [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag: ${GITHUB_REF_NAME} (expected vMAJOR.MINOR.PATCH)"
+            exit 1
+          fi
+
+      - name: Verify tag matches VERSION file
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ "$tag" != "$version" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION (${version})"
+            exit 1
+          fi
+          echo "Version OK: ${version}"
+
+      - name: Verify CHANGELOG entry exists
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          if ! grep -qF "## [${tag}]" CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for version ${tag}"
+            exit 1
+          fi
+          bash scripts/extract-changelog.sh "${tag}" >/dev/null
+
+      - name: Verify tagged commit is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/main"; then
+            echo "Tag ${GITHUB_REF_NAME} must point to a commit reachable from origin/main"
+            exit 1
+          fi
+
+  shellcheck:
+    name: shellcheck
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        run: find . -type f -name '*.sh' -not -path './.git/*' -exec shellcheck {} +
+
+  bats:
+    name: bats
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+      - name: Run bats tests
+        run: bats tests/bats/
+
+  pester:
+    name: pester
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
+      - name: Run Pester tests
+        shell: pwsh
+        run: Invoke-Pester -Path tests/pester/ -Output Detailed -CI
+
+  release:
+    name: Create GitHub Release
+    needs: [validate, shellcheck, bats, pester]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release notes
+        id: notes
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          bash scripts/extract-changelog.sh "${tag}" > release-notes.md
+          echo "version=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: v${{ steps.notes.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false

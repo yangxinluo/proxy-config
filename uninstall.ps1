@@ -6,7 +6,8 @@
 param(
     [switch]$WhatIf,
     [switch]$Force,
-    [switch]$KeepEnvVar
+    [switch]$KeepEnvVar,
+    [switch]$PurgeProxyEnv
 )
 
 $ErrorActionPreference = 'Stop'
@@ -154,6 +155,7 @@ Write-Host ''
 if (-not $Force -and -not $WhatIf) {
     Write-Host 'This will remove PATH entry, shell hooks'
     if (-not $KeepEnvVar) { Write-Host '  and CLASH_PROXY_ROOT user env var' }
+    if ($PurgeProxyEnv) { Write-Host '  and persistent proxy env (User env, WSL block, git global, state)' }
     Write-Host ''
     $answer = Read-Host 'Continue? [Y/n]'
     if ($answer -match '^[Nn]') {
@@ -168,6 +170,26 @@ foreach ($profilePath in $profilePaths) {
 }
 Remove-MarkedBlock -FilePath $bashrcPath | Out-Null
 Remove-WslHook
+
+if ($PurgeProxyEnv) {
+    if ($WhatIf) {
+        Write-Host '[WhatIf] Would purge persistent proxy env (User env, WSL block, git global, state)' -ForegroundColor Yellow
+    } else {
+        $proxyScript = Join-Path $Root 'bin\proxy.ps1'
+        if (Test-Path $proxyScript) {
+            . $proxyScript
+            $config = Read-ClashProxyConfig -Root $Root
+            Clear-UserProxyEnv
+            Clear-WslPersistEnvBlock
+            Clear-GitProxy
+            Clear-ToolProxy -Config $config
+            Clear-ClashProxyState -StateDir $config.STATE_DIR
+            Write-Host 'Purged persistent proxy configuration' -ForegroundColor Green
+        } else {
+            Write-Host 'proxy.ps1 not found — skipped proxy env purge' -ForegroundColor Yellow
+        }
+    }
+}
 
 if (-not $KeepEnvVar) {
     Remove-UserEnvVar -Name 'CLASH_PROXY_ROOT' | Out-Null

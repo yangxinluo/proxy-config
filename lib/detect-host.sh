@@ -18,6 +18,18 @@ detect_clash_platform() {
     export CLASH_PROXY_PLATFORM
 }
 
+_wsl_is_mirrored() {
+    if [[ -f /etc/wsl.conf ]] && grep -qiE '^\s*mode\s*=\s*mirrored' /etc/wsl.conf 2>/dev/null; then
+        return 0
+    fi
+    # Mirrored networking: localhost reaches the Windows host directly
+    local probe_port="${HTTP_PORT:-7890}"
+    if (echo >/dev/tcp/127.0.0.1/"$probe_port") 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 detect_clash_host() {
     detect_clash_platform
 
@@ -32,6 +44,9 @@ detect_clash_host() {
             CLASH_PROXY_HOST="127.0.0.1"
             ;;
         wsl2)
+            if _wsl_is_mirrored; then
+                CLASH_PROXY_HOST="127.0.0.1"
+            else
             local nameserver gateway
             if [[ -f /etc/resolv.conf ]]; then
                 nameserver="$(awk '/^nameserver[[:space:]]+/ { print $2; exit }' /etc/resolv.conf)"
@@ -41,6 +56,7 @@ detect_clash_host() {
             else
                 gateway="$(ip route show default 2>/dev/null | awk '/default/ { print $3; exit }')"
                 CLASH_PROXY_HOST="${gateway:-127.0.0.1}"
+            fi
             fi
             ;;
         *)

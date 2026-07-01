@@ -7,12 +7,26 @@ if not defined CLASH_PROXY_ROOT (
 set "CMD_ARG="
 set "GLOBAL_FLAG=0"
 set "GIT_ONLY=0"
+set "JSON_FLAG=0"
+set "PROFILE_NAME="
 
 :parse_args
 if "%~1"=="" goto done_parse
+if /i "%~1"=="--profile" (
+    set "PROFILE_NAME=%~2"
+    shift
+    shift
+    goto parse_args
+)
 if /i "%~1"=="on" set "CMD_ARG=on" & shift & goto parse_args
 if /i "%~1"=="off" set "CMD_ARG=off" & shift & goto parse_args
 if /i "%~1"=="status" set "CMD_ARG=status" & shift & goto parse_args
+if /i "%~1"=="toggle" set "CMD_ARG=toggle" & shift & goto parse_args
+if /i "%~1"=="version" set "CMD_ARG=version" & shift & goto parse_args
+if /i "%~1"=="help" set "CMD_ARG=help" & shift & goto parse_args
+if /i "%~1"=="-h" set "CMD_ARG=help" & shift & goto parse_args
+if /i "%~1"=="--help" set "CMD_ARG=help" & shift & goto parse_args
+if /i "%~1"=="--json" set "JSON_FLAG=1" & shift & goto parse_args
 if /i "%~1"=="-g" set "GLOBAL_FLAG=1" & shift & goto parse_args
 if /i "%~1"=="--global" set "GLOBAL_FLAG=1" & shift & goto parse_args
 if /i "%~1"=="-Global" set "GLOBAL_FLAG=1" & shift & goto parse_args
@@ -46,9 +60,16 @@ if "%CMD_ARG%"=="off" if "%GLOBAL_FLAG%"=="0" (
     exit /b %ERRORLEVEL%
 )
 
+if "%CMD_ARG%"=="status" if "%GLOBAL_FLAG%"=="0" if "%JSON_FLAG%"=="0" (
+    call "%CLASH_PROXY_ROOT%\bin\proxy-session-status.cmd"
+    exit /b %ERRORLEVEL%
+)
+
 set "PS_ARGS=%CMD_ARG%"
 if "%GLOBAL_FLAG%"=="1" set "PS_ARGS=%PS_ARGS% -g"
 if "%GIT_ONLY%"=="1" set "PS_ARGS=%PS_ARGS% --git-only"
+if "%JSON_FLAG%"=="1" set "PS_ARGS=%PS_ARGS% --json"
+if defined PROFILE_NAME set "PS_ARGS=%PS_ARGS% --profile %PROFILE_NAME%"
 
 where pwsh >nul 2>&1
 if errorlevel 1 (

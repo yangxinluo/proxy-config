@@ -20,29 +20,56 @@ function Get-ClashProxyRoot {
 }
 
 function Read-ClashProxyConfig {
-    param([string]$Root)
+    param(
+        [string]$Root,
+        [string]$Profile = ''
+    )
 
+    $defaultsPath = Join-Path $Root 'config.defaults.env'
     $configPath = Join-Path $Root 'config.env'
     if (-not (Test-Path $configPath)) {
         throw "config not found at $configPath"
     }
 
     $config = @{
-        HTTP_PORT    = 7890
-        SOCKS_PORT   = 7891
-        NO_PROXY     = 'localhost,127.0.0.1'
-        HOST         = ''
-        GIT_USE_HTTP = '1'
-        STATE_DIR    = ''
+        HTTP_PORT        = 7890
+        SOCKS_PORT       = 7891
+        NO_PROXY         = 'localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16'
+        HOST             = ''
+        GIT_USE_HTTP     = '1'
+        GIT_PROXY_SCHEME = 'http'
+        HEALTH_CHECK_URL = 'http://www.gstatic.com/generate_204'
+        NPM_USE_PROXY    = '0'
+        PIP_USE_PROXY    = '0'
+        DOCKER_USE_PROXY = '0'
+        APT_USE_PROXY    = '0'
+        STATE_DIR        = ''
     }
 
-    foreach ($line in Get-Content $configPath) {
-        $trimmed = $line.Trim()
-        if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
-        if ($trimmed -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            $key = $Matches[1]
-            $value = $Matches[2]
-            $config[$key] = $value
+    foreach ($path in @($defaultsPath, $configPath)) {
+        if (-not (Test-Path $path)) { continue }
+        foreach ($line in Get-Content $path) {
+            $trimmed = $line.Trim()
+            if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+            if ($trimmed -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+                $key = $Matches[1]
+                $value = $Matches[2]
+                $config[$key] = $value
+            }
+        }
+    }
+
+    if ($Profile) {
+        $profilePath = Join-Path $Root "config.d/${Profile}.env"
+        if (-not (Test-Path $profilePath)) {
+            throw "profile not found: $Profile (expected $profilePath)"
+        }
+        foreach ($line in Get-Content $profilePath) {
+            $trimmed = $line.Trim()
+            if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+            if ($trimmed -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+                $config[$Matches[1]] = $Matches[2]
+            }
         }
     }
 
@@ -53,7 +80,26 @@ function Read-ClashProxyConfig {
         $config.STATE_DIR = $config.STATE_DIR -replace '/', '\'
     }
 
+    Test-ClashProxyConfig -Config $config
     return $config
+}
+
+function Test-ClashProxyConfig {
+    param([hashtable]$Config)
+
+    if ($Config.HOST -and $Config.HOST -notmatch '^[A-Za-z0-9.:_-]+$') {
+        throw "invalid HOST '$($Config.HOST)' (allowed: letters, digits, . : _ -)"
+    }
+    foreach ($name in @('HTTP_PORT', 'SOCKS_PORT')) {
+        $port = $Config[$name]
+        if ($port -notmatch '^\d+$') {
+            throw "invalid $name '$port' (must be a number)"
+        }
+        $portNum = [int]$port
+        if ($portNum -lt 1 -or $portNum -gt 65535) {
+            throw "invalid $name '$port' (must be 1-65535)"
+        }
+    }
 }
 
 function Get-ClashProxyHost {
@@ -197,10 +243,28 @@ function Test-WslPersistEnvBlock {
     return ($result -match 'yes')
 }
 
+function Get-GitProxyUrl {
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    $scheme = if ($Config.GIT_PROXY_SCHEME) { $Config.GIT_PROXY_SCHEME.ToLower() } else { 'http' }
+    if ($scheme -in @('socks5', 'socks')) {
+        return $SocksUrl
+    }
+    return $HttpUrl
+}
+
 function Set-GitSessionProxy {
-    param([string]$HttpUrl)
-    $env:GIT_HTTP_PROXY = $HttpUrl
-    $env:GIT_HTTPS_PROXY = $HttpUrl
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    $proxyUrl = Get-GitProxyUrl -Config $Config -HttpUrl $HttpUrl -SocksUrl $SocksUrl
+    $env:GIT_HTTP_PROXY = $proxyUrl
+    $env:GIT_HTTPS_PROXY = $proxyUrl
 }
 
 function Clear-GitSessionProxy {
@@ -209,9 +273,14 @@ function Clear-GitSessionProxy {
 }
 
 function Set-GitProxy {
-    param([string]$HttpUrl)
-    git config --global http.proxy $HttpUrl
-    git config --global https.proxy $HttpUrl
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    $proxyUrl = Get-GitProxyUrl -Config $Config -HttpUrl $HttpUrl -SocksUrl $SocksUrl
+    git config --global http.proxy $proxyUrl
+    git config --global https.proxy $proxyUrl
 }
 
 function Clear-GitProxy {
@@ -260,25 +329,207 @@ function Clear-ClashProxyState {
     if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
 }
 
+function Get-ClashProxyVersion {
+    $versionFile = Join-Path (Get-ClashProxyRoot) 'VERSION'
+    if (Test-Path $versionFile) {
+        return (Get-Content $versionFile -Raw).Trim()
+    }
+    return 'unknown'
+}
+
+function Show-ProxyHelp {
+    @'
+usage: proxy {on|off|status|toggle|version|help} [options]
+
+commands:
+  on       Enable proxy (session by default)
+  off      Disable proxy
+  status   Show proxy status
+  toggle   Switch between on and off
+  version  Print version
+  help     Show this help
+
+options:
+  -g, --global, -Global   Persist settings across terminals
+  --git-only, -GitOnly    Configure Git proxy only
+  --json                  Machine-readable status output (status only)
+'@ | Write-Host
+}
+
+function Test-ClashProxyPort {
+    param(
+        [string]$HostAddr,
+        [int]$Port
+    )
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $async = $client.BeginConnect($HostAddr, $Port, $null, $null)
+        $ok = $async.AsyncWaitHandle.WaitOne(2000, $false)
+        if ($ok -and $client.Connected) {
+            $client.Close()
+            return $true
+        }
+        $client.Close()
+    } catch {}
+    return $false
+}
+
+function Test-ClashProxyHealth {
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl
+    )
+    if (-not $Config.HEALTH_CHECK_URL) {
+        return 'skipped'
+    }
+    try {
+        $response = Invoke-WebRequest -Uri $Config.HEALTH_CHECK_URL `
+            -Proxy $HttpUrl -TimeoutSec 3 -UseBasicParsing
+        return "ok (HTTP $($response.StatusCode))"
+    } catch {
+        return 'unreachable'
+    }
+}
+
+function Get-ClashProxyStatusJson {
+    param(
+        [hashtable]$Config,
+        [string]$HostAddr,
+        [string]$HttpUrl,
+        [hashtable]$State
+    )
+    $displayScope = 'off'
+    if ($env:CLASH_PROXY_SCOPE) {
+        $displayScope = $env:CLASH_PROXY_SCOPE
+    } elseif ($State.scope -eq 'global') {
+        $displayScope = 'global'
+    } elseif ($env:HTTP_PROXY -or $env:http_proxy -or $env:GIT_HTTP_PROXY) {
+        $displayScope = 'session'
+    }
+
+    $gitHttp = git config --global --get http.proxy 2>$null
+    $portOpen = Test-ClashProxyPort -HostAddr $hostAddr -Port ([int]$Config.HTTP_PORT)
+    $health = Test-ClashProxyHealth -Config $Config -HttpUrl $httpUrl
+
+    [ordered]@{
+        version     = Get-ClashProxyVersion
+        platform    = 'powershell'
+        host        = $hostAddr
+        http_port   = [int]$Config.HTTP_PORT
+        socks_port  = [int]$Config.SOCKS_PORT
+        scope       = $displayScope
+        mode        = $State.mode
+        session_env = [bool]($env:HTTP_PROXY -or $env:http_proxy)
+        git_session = [bool]($env:GIT_HTTP_PROXY -or $env:GIT_HTTPS_PROXY)
+        git_global  = [bool]$gitHttp
+        port_open   = $portOpen
+        health      = $health
+    } | ConvertTo-Json -Compress
+}
+
+function Set-ToolProxy {
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    if ($Config.NPM_USE_PROXY -eq '1' -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+        npm config set proxy $HttpUrl 2>$null
+        npm config set https-proxy $HttpUrl 2>$null
+    }
+    if ($Config.PIP_USE_PROXY -eq '1') {
+        $env:PIP_PROXY = $HttpUrl
+    }
+    if ($Config.DOCKER_USE_PROXY -eq '1') {
+        $env:DOCKER_HTTP_PROXY = $HttpUrl
+        $env:DOCKER_HTTPS_PROXY = $HttpUrl
+        $env:DOCKER_ALL_PROXY = $SocksUrl
+        $env:DOCKER_NO_PROXY = $Config.NO_PROXY
+    }
+    if ($Config.APT_USE_PROXY -eq '1') {
+        $env:APT_HTTP_PROXY = $HttpUrl
+        $env:APT_HTTPS_PROXY = $HttpUrl
+    }
+}
+
+function Clear-ToolProxy {
+    param([hashtable]$Config)
+    if ($Config.NPM_USE_PROXY -eq '1' -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+        npm config delete proxy 2>$null
+        npm config delete https-proxy 2>$null
+    }
+    Remove-Item Env:PIP_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:DOCKER_HTTP_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:DOCKER_HTTPS_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:DOCKER_ALL_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:DOCKER_NO_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:APT_HTTP_PROXY -ErrorAction SilentlyContinue
+    Remove-Item Env:APT_HTTPS_PROXY -ErrorAction SilentlyContinue
+}
+
+function Show-ClashProxyGlobalStatus {
+    param([string]$StateDir)
+
+    Get-UserProxyEnvStatus
+
+    $gitHttp = git config --global --get http.proxy 2>$null
+    $gitHttps = git config --global --get https.proxy 2>$null
+    if ($gitHttp -or $gitHttps) {
+        Write-Host '  git global:    on'
+        Write-Host "    http.proxy:  $gitHttp"
+        Write-Host "    https.proxy: $gitHttps"
+    } else {
+        Write-Host '  git global:    off'
+    }
+
+    if (Test-WslPersistEnvBlock) {
+        Write-Host '  WSL env block: present'
+    }
+}
+
 function proxy {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0, Mandatory = $true)]
-        [ValidateSet('on', 'off', 'status')]
+        [ValidateSet('on', 'off', 'status', 'toggle', 'version', 'help')]
         [string]$Command,
 
         [Alias('g')]
         [switch]$Global,
 
-        [switch]$GitOnly
+        [switch]$GitOnly,
+
+        [switch]$Json,
+
+        [string]$Profile = ''
     )
 
+    if ($Command -eq 'help') {
+        Show-ProxyHelp
+        return
+    }
+    if ($Command -eq 'version') {
+        Write-Output (Get-ClashProxyVersion)
+        return
+    }
+
     $root = Get-ClashProxyRoot
-    $config = Read-ClashProxyConfig -Root $root
+    $config = Read-ClashProxyConfig -Root $root -Profile $Profile
     $hostAddr = Get-ClashProxyHost -Config $config
     $httpUrl = "http://${hostAddr}:$($config.HTTP_PORT)"
     $socksUrl = "socks5://${hostAddr}:$($config.SOCKS_PORT)"
     $stateDir = $config.STATE_DIR
+
+    if ($Command -eq 'toggle') {
+        $state = Read-ClashProxyState -StateDir $stateDir
+        $isOn = $env:HTTP_PROXY -or $env:http_proxy -or $env:GIT_HTTP_PROXY -or ($state.scope -eq 'global')
+        if ($isOn) {
+            proxy -Command off -Global:$Global -GitOnly:$GitOnly -Profile $Profile
+        } else {
+            proxy -Command on -Global:$Global -GitOnly:$GitOnly -Profile $Profile
+        }
+        return
+    }
 
     switch ($Command) {
         'on' {
@@ -287,7 +538,7 @@ function proxy {
 
                 if ($GitOnly) {
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitProxy -HttpUrl $httpUrl
+                        Set-GitProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-ClashProxyState -StateDir $stateDir -Mode 'git-only' -Scope 'global' `
                         -ClashHost $hostAddr -HttpPort $config.HTTP_PORT -SocksPort $config.SOCKS_PORT
@@ -298,8 +549,9 @@ function proxy {
                     Set-SessionProxyEnv -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
                     Set-UserProxyEnv -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
                     Set-WslPersistEnvBlock -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
+                    Set-ToolProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitProxy -HttpUrl $httpUrl
+                        Set-GitProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-ClashProxyState -StateDir $stateDir -Mode 'full' -Scope 'global' `
                         -ClashHost $hostAddr -HttpPort $config.HTTP_PORT -SocksPort $config.SOCKS_PORT
@@ -314,15 +566,16 @@ function proxy {
 
                 if ($GitOnly) {
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitSessionProxy -HttpUrl $httpUrl
+                        Set-GitSessionProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-Host 'Clash proxy enabled (git-only, session)'
                     Write-Host "  Host: $hostAddr"
                     Write-Host "  HTTP: $httpUrl"
                 } else {
                     Set-SessionProxyEnv -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
+                    Set-ToolProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitSessionProxy -HttpUrl $httpUrl
+                        Set-GitSessionProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-Host 'Clash proxy enabled (full, session)'
                     Write-Host '  Platform: powershell'
@@ -343,6 +596,7 @@ function proxy {
                 Write-Host 'Git proxy disabled'
             } else {
                 Clear-SessionProxyEnv
+                Clear-ToolProxy -Config $config
 
                 $state = Read-ClashProxyState -StateDir $stateDir
                 $clearGlobal = $Global -or ($state.scope -eq 'global')
@@ -351,6 +605,7 @@ function proxy {
                     Clear-UserProxyEnv
                     Clear-WslPersistEnvBlock
                     Clear-GitProxy
+                    Clear-ToolProxy -Config $config
                     Clear-ClashProxyState -StateDir $stateDir
                     Write-Host 'Clash proxy disabled (session + global)'
                 } else {
@@ -360,6 +615,11 @@ function proxy {
         }
         'status' {
             $state = Read-ClashProxyState -StateDir $stateDir
+
+            if ($Json) {
+                Write-Output (Get-ClashProxyStatusJson -Config $config -HostAddr $hostAddr -HttpUrl $httpUrl -State $state)
+                return
+            }
 
             $displayScope = 'off'
             if ($env:CLASH_PROXY_SCOPE) {
@@ -412,13 +672,13 @@ function proxy {
                 Write-Host '  WSL env block: present'
             }
 
-            try {
-                $response = Invoke-WebRequest -Uri 'http://www.gstatic.com/generate_204' `
-                    -Proxy $httpUrl -TimeoutSec 3 -UseBasicParsing
-                Write-Host "  health:      ok (HTTP $($response.StatusCode))"
-            } catch {
-                Write-Host '  health:      unreachable'
+            if (Test-ClashProxyPort -HostAddr $hostAddr -Port ([int]$config.HTTP_PORT)) {
+                Write-Host "  port:        open (TCP $($config.HTTP_PORT))"
+            } else {
+                Write-Host "  port:        closed (TCP $($config.HTTP_PORT))"
             }
+
+            Write-Host "  health:      $(Test-ClashProxyHealth -Config $config -HttpUrl $httpUrl)"
         }
     }
 }
@@ -428,12 +688,33 @@ if ($MyInvocation.InvocationName -ne '.') {
     $cmd = 'status'
     $gitOnly = $false
     $globalFlag = $false
-    foreach ($arg in $args) {
+    $gitGlobalOnly = $false
+    $jsonFlag = $false
+    $profileName = ''
+    $parsedArgs = [System.Collections.Generic.List[string]]::new()
+    for ($i = 0; $i -lt $args.Count; $i++) {
+        if ($args[$i] -eq '--profile' -and ($i + 1) -lt $args.Count) {
+            $profileName = $args[$i + 1]
+            $i++
+            continue
+        }
+        $parsedArgs.Add($args[$i])
+    }
+    foreach ($arg in $parsedArgs) {
         switch -Regex ($arg) {
             '^(-GitOnly|--git-only)$' { $gitOnly = $true; continue }
             '^(-g|-Global|--global)$' { $globalFlag = $true; continue }
-            '^(on|off|status)$' { $cmd = $arg; continue }
+            '^--git-global-only$' { $gitGlobalOnly = $true; continue }
+            '^--json$' { $jsonFlag = $true; continue }
+            '^(on|off|status|toggle|version|help)$' { $cmd = $arg; continue }
+            '^(-h|--help)$' { $cmd = 'help'; continue }
         }
     }
-    proxy -Command $cmd -Global:$globalFlag -GitOnly:$gitOnly
+    if ($gitGlobalOnly -and $cmd -eq 'status') {
+        $root = Get-ClashProxyRoot
+        $config = Read-ClashProxyConfig -Root $root -Profile $profileName
+        Show-ClashProxyGlobalStatus -StateDir $config.STATE_DIR
+        return
+    }
+    proxy -Command $cmd -Global:$globalFlag -GitOnly:$gitOnly -Json:$jsonFlag -Profile $profileName
 }

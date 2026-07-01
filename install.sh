@@ -5,7 +5,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_DIR="${ROOT}/bin"
 HOOKS_DIR="${ROOT}/hooks"
 START_MARKER='# >>> clash-proxy >>>'
 END_MARKER='# <<< clash-proxy <<<'
@@ -107,7 +106,7 @@ if [[ -n "${MSYSTEM:-}" || "${OSTYPE:-}" == msys* ]]; then
 fi
 
 # WSL: ~/.bashrc with /mnt/... path
-if grep -qi microsoft /proc/version 2>/dev/null; then
+if [[ "${SKIP_WSL}" != true ]] && grep -qi microsoft /proc/version 2>/dev/null; then
     if [[ "${ROOT}" == /mnt/* ]]; then
         PROXY_ROOT="${ROOT}"
     else

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # User-level environment persistence (Windows User env + WSL ~/.bashrc export block).
 
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-config.sh"
+
 PERSIST_ENV_START='# >>> clash-proxy-env >>>'
 PERSIST_ENV_END='# <<< clash-proxy-env <<<'
 
@@ -13,20 +16,30 @@ _persist_env_is_wsl() {
 _persist_env_powershell_set() {
     local key="$1"
     local value="$2"
+    _validate_proxy_env_key "$key" || return 1
+    export _CLASH_PERSIST_KEY="$key"
+    export _CLASH_PERSIST_VALUE="$value"
     powershell.exe -NoProfile -Command \
-        "[Environment]::SetEnvironmentVariable('${key}', '${value}', 'User')" 2>/dev/null
+        "[Environment]::SetEnvironmentVariable(\$env:_CLASH_PERSIST_KEY, \$env:_CLASH_PERSIST_VALUE, 'User')" 2>/dev/null
+    unset _CLASH_PERSIST_KEY _CLASH_PERSIST_VALUE
 }
 
 _persist_env_powershell_clear() {
     local key="$1"
+    _validate_proxy_env_key "$key" || return 1
+    export _CLASH_PERSIST_KEY="$key"
     powershell.exe -NoProfile -Command \
-        "[Environment]::SetEnvironmentVariable('${key}', \$null, 'User')" 2>/dev/null
+        "[Environment]::SetEnvironmentVariable(\$env:_CLASH_PERSIST_KEY, \$null, 'User')" 2>/dev/null
+    unset _CLASH_PERSIST_KEY
 }
 
 _persist_env_powershell_get() {
     local key="$1"
+    _validate_proxy_env_key "$key" || return 1
+    export _CLASH_PERSIST_KEY="$key"
     powershell.exe -NoProfile -Command \
-        "[Environment]::GetEnvironmentVariable('${key}', 'User')" 2>/dev/null | tr -d '\r'
+        "[Environment]::GetEnvironmentVariable(\$env:_CLASH_PERSIST_KEY, 'User')" 2>/dev/null | tr -d '\r'
+    unset _CLASH_PERSIST_KEY
 }
 
 persist_env_on() {
