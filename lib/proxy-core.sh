@@ -88,7 +88,7 @@ proxy_on() {
 
         if [[ "$GIT_ONLY" -eq 1 ]]; then
             if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-                git_proxy_on "$http_url"
+                git_proxy_on "$http_url" "$socks_url"
             fi
             _write_state "git-only" "global"
             echo "Clash proxy enabled (git-only, global)"
@@ -100,7 +100,7 @@ proxy_on() {
         _set_env_proxies "$http_url" "$socks_url"
         persist_env_on "$http_url" "$socks_url" "$NO_PROXY"
         if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-            git_proxy_on "$http_url"
+            git_proxy_on "$http_url" "$socks_url"
         fi
         _write_state "full" "global"
         echo "Clash proxy enabled (full, global)"
@@ -115,7 +115,7 @@ proxy_on() {
 
     if [[ "$GIT_ONLY" -eq 1 ]]; then
         if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-            git_session_proxy_on "$http_url"
+            git_session_proxy_on "$http_url" "$socks_url"
         fi
         echo "Clash proxy enabled (git-only, session)"
         echo "  Host: ${CLASH_PROXY_HOST}"
@@ -125,7 +125,7 @@ proxy_on() {
 
     _set_env_proxies "$http_url" "$socks_url"
     if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
-        git_session_proxy_on "$http_url"
+        git_session_proxy_on "$http_url" "$socks_url"
     fi
     echo "Clash proxy enabled (full, session)"
     echo "  Platform: ${CLASH_PROXY_PLATFORM}"

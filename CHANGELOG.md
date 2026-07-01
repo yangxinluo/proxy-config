@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-01
+
+### Added
+
+- **Git SOCKS proxy:** `GIT_PROXY_SCHEME` config (`http` | `socks5`) selects HTTP or SOCKS URL for git session/global proxy.
+- **Automated tests:** `bats` tests for `validate-config`, `detect-host`, and `git-proxy`; Pester tests for `proxy.ps1` config helpers.
+- **CI:** GitHub Actions workflow with shellcheck, bats (Linux), Pester (Windows), and changelog sanity check.
+
 ## [1.1.1] - 2026-07-01
 
 ### Fixed
@@ -58,6 +66,7 @@ If you previously ran `proxy on` and want the old persistent behavior, run `prox
 - Default HTTP/SOCKS ports match common Clash setups (7890 / 7891); override in `config.env`
 - Compatible with any local HTTP+SOCKS proxy (Clash Verge, Mihomo, legacy CFW, etc.)
 
+[1.2.0]: https://github.com/example/proxy-config/releases/tag/v1.2.0
 [1.1.1]: https://github.com/example/proxy-config/releases/tag/v1.1.1
 [1.1.0]: https://github.com/example/proxy-config/releases/tag/v1.1.0
 [1.0.0]: https://github.com/example/proxy-config/releases/tag/v1.0.0

@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 # Git proxy configuration helpers (session env + global config).
 
+_git_proxy_url() {
+    local http_url="$1"
+    local socks_url="$2"
+    case "${GIT_PROXY_SCHEME:-http}" in
+        socks5|socks)
+            echo "$socks_url"
+            ;;
+        *)
+            echo "$http_url"
+            ;;
+    esac
+}
+
 git_session_proxy_on() {
     local http_url="$1"
-    export GIT_HTTP_PROXY="$http_url"
-    export GIT_HTTPS_PROXY="$http_url"
+    local socks_url="${2:-}"
+    local proxy_url
+    if [[ -n "$socks_url" ]]; then
+        proxy_url="$(_git_proxy_url "$http_url" "$socks_url")"
+    else
+        proxy_url="$http_url"
+    fi
+    export GIT_HTTP_PROXY="$proxy_url"
+    export GIT_HTTPS_PROXY="$proxy_url"
 }
 
 git_session_proxy_off() {
@@ -23,8 +43,15 @@ git_session_proxy_status() {
 
 git_proxy_on() {
     local http_url="$1"
-    git config --global http.proxy "$http_url"
-    git config --global https.proxy "$http_url"
+    local socks_url="${2:-}"
+    local proxy_url
+    if [[ -n "$socks_url" ]]; then
+        proxy_url="$(_git_proxy_url "$http_url" "$socks_url")"
+    else
+        proxy_url="$http_url"
+    fi
+    git config --global http.proxy "$proxy_url"
+    git config --global https.proxy "$proxy_url"
 }
 
 git_proxy_off() {

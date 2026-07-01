@@ -221,10 +221,28 @@ function Test-WslPersistEnvBlock {
     return ($result -match 'yes')
 }
 
+function Get-GitProxyUrl {
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    $scheme = if ($Config.GIT_PROXY_SCHEME) { $Config.GIT_PROXY_SCHEME.ToLower() } else { 'http' }
+    if ($scheme -in @('socks5', 'socks')) {
+        return $SocksUrl
+    }
+    return $HttpUrl
+}
+
 function Set-GitSessionProxy {
-    param([string]$HttpUrl)
-    $env:GIT_HTTP_PROXY = $HttpUrl
-    $env:GIT_HTTPS_PROXY = $HttpUrl
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    $proxyUrl = Get-GitProxyUrl -Config $Config -HttpUrl $HttpUrl -SocksUrl $SocksUrl
+    $env:GIT_HTTP_PROXY = $proxyUrl
+    $env:GIT_HTTPS_PROXY = $proxyUrl
 }
 
 function Clear-GitSessionProxy {
@@ -233,9 +251,14 @@ function Clear-GitSessionProxy {
 }
 
 function Set-GitProxy {
-    param([string]$HttpUrl)
-    git config --global http.proxy $HttpUrl
-    git config --global https.proxy $HttpUrl
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl,
+        [string]$SocksUrl
+    )
+    $proxyUrl = Get-GitProxyUrl -Config $Config -HttpUrl $HttpUrl -SocksUrl $SocksUrl
+    git config --global http.proxy $proxyUrl
+    git config --global https.proxy $proxyUrl
 }
 
 function Clear-GitProxy {
@@ -331,7 +354,7 @@ function proxy {
 
                 if ($GitOnly) {
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitProxy -HttpUrl $httpUrl
+                        Set-GitProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-ClashProxyState -StateDir $stateDir -Mode 'git-only' -Scope 'global' `
                         -ClashHost $hostAddr -HttpPort $config.HTTP_PORT -SocksPort $config.SOCKS_PORT
@@ -343,7 +366,7 @@ function proxy {
                     Set-UserProxyEnv -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
                     Set-WslPersistEnvBlock -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitProxy -HttpUrl $httpUrl
+                        Set-GitProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-ClashProxyState -StateDir $stateDir -Mode 'full' -Scope 'global' `
                         -ClashHost $hostAddr -HttpPort $config.HTTP_PORT -SocksPort $config.SOCKS_PORT
@@ -358,7 +381,7 @@ function proxy {
 
                 if ($GitOnly) {
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitSessionProxy -HttpUrl $httpUrl
+                        Set-GitSessionProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-Host 'Clash proxy enabled (git-only, session)'
                     Write-Host "  Host: $hostAddr"
@@ -366,7 +389,7 @@ function proxy {
                 } else {
                     Set-SessionProxyEnv -HttpUrl $httpUrl -SocksUrl $socksUrl -NoProxy $config.NO_PROXY
                     if ($config.GIT_USE_HTTP -eq '1') {
-                        Set-GitSessionProxy -HttpUrl $httpUrl
+                        Set-GitSessionProxy -Config $config -HttpUrl $httpUrl -SocksUrl $socksUrl
                     }
                     Write-Host 'Clash proxy enabled (full, session)'
                     Write-Host '  Platform: powershell'
