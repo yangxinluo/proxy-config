@@ -8,9 +8,16 @@ set "CMD_ARG="
 set "GLOBAL_FLAG=0"
 set "GIT_ONLY=0"
 set "JSON_FLAG=0"
+set "PROFILE_NAME="
 
 :parse_args
 if "%~1"=="" goto done_parse
+if /i "%~1"=="--profile" (
+    set "PROFILE_NAME=%~2"
+    shift
+    shift
+    goto parse_args
+)
 if /i "%~1"=="on" set "CMD_ARG=on" & shift & goto parse_args
 if /i "%~1"=="off" set "CMD_ARG=off" & shift & goto parse_args
 if /i "%~1"=="status" set "CMD_ARG=status" & shift & goto parse_args
@@ -62,6 +69,7 @@ set "PS_ARGS=%CMD_ARG%"
 if "%GLOBAL_FLAG%"=="1" set "PS_ARGS=%PS_ARGS% -g"
 if "%GIT_ONLY%"=="1" set "PS_ARGS=%PS_ARGS% --git-only"
 if "%JSON_FLAG%"=="1" set "PS_ARGS=%PS_ARGS% --json"
+if defined PROFILE_NAME set "PS_ARGS=%PS_ARGS% --profile %PROFILE_NAME%"
 
 where pwsh >nul 2>&1
 if errorlevel 1 (

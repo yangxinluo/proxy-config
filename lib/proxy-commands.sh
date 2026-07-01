@@ -25,6 +25,7 @@ commands:
 options:
   -g, --global, -Global   Persist settings across terminals
   --git-only, -GitOnly    Configure Git proxy only
+  --profile <name>        Load config.d/<name>.env overlay
   --json                  Machine-readable status output (status only)
 
 examples:

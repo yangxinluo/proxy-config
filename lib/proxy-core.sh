@@ -99,6 +99,7 @@ proxy_on() {
 
         _set_env_proxies "$http_url" "$socks_url"
         persist_env_on "$http_url" "$socks_url" "$NO_PROXY"
+        tool_proxy_on "$http_url" "$socks_url"
         if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
             git_proxy_on "$http_url" "$socks_url"
         fi
@@ -124,6 +125,7 @@ proxy_on() {
     fi
 
     _set_env_proxies "$http_url" "$socks_url"
+    tool_proxy_on "$http_url" "$socks_url"
     if [[ "${GIT_USE_HTTP:-1}" == "1" ]]; then
         git_session_proxy_on "$http_url" "$socks_url"
     fi
@@ -150,6 +152,7 @@ proxy_off() {
 
     _unset_env_proxies
     git_session_proxy_off
+    tool_proxy_off
     unset CLASH_PROXY_SCOPE
 
     _read_state
@@ -162,6 +165,7 @@ proxy_off() {
 
     if [[ "$clear_global" -eq 1 ]]; then
         persist_env_off
+        tool_proxy_off
         git_proxy_off
         _clear_state
         echo "Clash proxy disabled (session + global)"
@@ -205,6 +209,7 @@ proxy_status() {
     persist_env_status
     git_session_proxy_status
     git_proxy_status
+    tool_proxy_status
 
     if _check_tcp_port "$CLASH_PROXY_HOST" "$HTTP_PORT" 2>/dev/null; then
         echo "  port:        open (TCP ${HTTP_PORT})"

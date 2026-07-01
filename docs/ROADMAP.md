@@ -214,10 +214,10 @@ powershell.exe -NoProfile -Command \
 
 | 版本 | 主题 | 包含项 |
 |------|------|--------|
-| **v1.1.1** | 修复 | #1 cmd status、#2 默认值统一、#4 注入加固、#5 配置校验 |
-| **v1.2.0** | 测试基座 | #12 bats + Pester、#13 CI、#3 git SOCKS 支持 |
-| **v1.3.0** | 体验 | #6 help/version/toggle/json、#8 健康检查 URL、#11 端口探测 |
-| **v1.4.0** | 场景扩展 | #7 多 Profile、#9 工具联动、#10 WSL mirrored、#15 卸载清理 |
+| **v1.1.1** | 修复 | ✅ #1 cmd status、#2 默认值统一、#4 注入加固、#5 配置校验 |
+| **v1.2.0** | 测试基座 | ✅ #12 bats + Pester、#13 CI、#3 git SOCKS 支持 |
+| **v1.3.0** | 体验 | ✅ #6 help/version/toggle/json、#8 健康检查 URL、#11 端口探测 |
+| **v1.4.0** | 场景扩展 | ✅ #7 多 Profile、#9 工具联动、#10 WSL mirrored、#15 卸载清理 |
 
 ---
 
@@ -250,4 +250,4 @@ powershell.exe -NoProfile -Command \
 
 ---
 
-*最后更新：2026-07-01（基于 v1.1.0 代码分析）*
+*最后更新：2026-07-01（v1.4.0 里程碑已完成）*

@@ -24,7 +24,17 @@ _proxy_load_config() {
     fi
     # shellcheck disable=SC1090
     source "$config_file"
+    if [[ -n "${CLASH_PROXY_PROFILE:-}" ]]; then
+        local profile_file="${CLASH_PROXY_ROOT}/config.d/${CLASH_PROXY_PROFILE}.env"
+        if [[ ! -f "$profile_file" ]]; then
+            echo "error: profile not found: ${CLASH_PROXY_PROFILE} (expected ${profile_file})" >&2
+            return 1
+        fi
+        # shellcheck disable=SC1090
+        source "$profile_file"
+    fi
     export HTTP_PORT SOCKS_PORT NO_PROXY GIT_USE_HTTP STATE_DIR HOST GIT_PROXY_SCHEME HEALTH_CHECK_URL
+    export NPM_USE_PROXY PIP_USE_PROXY DOCKER_USE_PROXY APT_USE_PROXY
     # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/validate-config.sh"
     validate_clash_proxy_config || return 1
@@ -38,6 +48,8 @@ _proxy_source_libs() {
     # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/persist-env.sh"
     # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/tool-proxy.sh"
+    # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/proxy-net.sh"
     # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/proxy-core.sh"
@@ -47,8 +59,6 @@ _proxy_source_libs() {
 
 _proxy_cli() {
     _proxy_resolve_root
-    _proxy_load_config || return 1
-    _proxy_source_libs
 
     local cmd="${1:-status}"
     shift || true
@@ -69,16 +79,35 @@ _proxy_cli() {
                 json_flag=1
                 shift
                 ;;
+            --profile)
+                shift
+                CLASH_PROXY_PROFILE="${1:-}"
+                if [[ -z "$CLASH_PROXY_PROFILE" ]]; then
+                    echo "error: --profile requires a name" >&2
+                    return 1
+                fi
+                export CLASH_PROXY_PROFILE
+                shift
+                ;;
             -h|--help)
-                proxy_help
+                _proxy_load_config 2>/dev/null || true
+                _proxy_source_libs 2>/dev/null || true
+                if declare -f proxy_help >/dev/null 2>&1; then
+                    proxy_help
+                else
+                    echo "usage: proxy {on|off|status|toggle|version|help} [--profile name] [-g] [--git-only] [--json]"
+                fi
                 return 0
                 ;;
             *)
-                echo "usage: proxy {on|off|status|toggle|version|help} [-g|--global] [--git-only] [--json]" >&2
+                echo "usage: proxy {on|off|status|toggle|version|help} [--profile name] [-g|--global] [--git-only] [--json]" >&2
                 return 1
                 ;;
         esac
     done
+
+    _proxy_load_config || return 1
+    _proxy_source_libs
 
     case "$cmd" in
         on)
@@ -122,7 +151,7 @@ _proxy_cli() {
             proxy_help
             ;;
         *)
-            echo "usage: proxy {on|off|status|toggle|version|help} [-g|--global] [--git-only] [--json]" >&2
+            echo "usage: proxy {on|off|status|toggle|version|help} [--profile name] [-g|--global] [--git-only] [--json]" >&2
             return 1
             ;;
     esac

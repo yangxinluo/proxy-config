@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-01
+
+### Added
+
+- **Multi-profile:** `config.d/<name>.env` overlays via `proxy on --profile <name>` (see `config.d/*.env.example`).
+- **Dev-tool proxy:** Optional `NPM_USE_PROXY`, `PIP_USE_PROXY`, `DOCKER_USE_PROXY`, `APT_USE_PROXY` in config.
+- **WSL mirrored networking:** `detect-host.sh` prefers `127.0.0.1` when mirrored mode or localhost port probe succeeds.
+- **Uninstall purge:** `uninstall.ps1 -PurgeProxyEnv` clears User env, WSL block, git global, tool proxy, and state file.
+
 ## [1.3.0] - 2026-07-01
 
 ### Added
@@ -75,6 +84,7 @@ If you previously ran `proxy on` and want the old persistent behavior, run `prox
 - Default HTTP/SOCKS ports match common Clash setups (7890 / 7891); override in `config.env`
 - Compatible with any local HTTP+SOCKS proxy (Clash Verge, Mihomo, legacy CFW, etc.)
 
+[1.4.0]: https://github.com/example/proxy-config/releases/tag/v1.4.0
 [1.3.0]: https://github.com/example/proxy-config/releases/tag/v1.3.0
 [1.2.0]: https://github.com/example/proxy-config/releases/tag/v1.2.0
 [1.1.1]: https://github.com/example/proxy-config/releases/tag/v1.1.1
