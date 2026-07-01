@@ -206,14 +206,11 @@ proxy_status() {
     git_session_proxy_status
     git_proxy_status
 
-    if command -v curl >/dev/null 2>&1; then
-        local code
-        code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 \
-            -x "$HTTP_PROXY_URL" "http://www.gstatic.com/generate_204" 2>/dev/null || echo "000")"
-        if [[ "$code" == "204" || "$code" == "200" ]]; then
-            echo "  health:      ok (HTTP ${code})"
-        else
-            echo "  health:      unreachable (HTTP ${code})"
-        fi
+    if _check_tcp_port "$CLASH_PROXY_HOST" "$HTTP_PORT" 2>/dev/null; then
+        echo "  port:        open (TCP ${HTTP_PORT})"
+    else
+        echo "  port:        closed (TCP ${HTTP_PORT})"
     fi
+
+    echo "  health:      $(_proxy_health_check "$HTTP_PROXY_URL")"
 }

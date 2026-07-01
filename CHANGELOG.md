@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-01
+
+### Added
+
+- **CLI commands:** `proxy help`, `proxy version`, `proxy toggle`, and `proxy status --json`.
+- **Configurable health check:** `HEALTH_CHECK_URL` in `config.env` (empty value skips the probe).
+- **Port probe:** `proxy status` reports TCP connectivity to the HTTP proxy port.
+- **VERSION file:** Single source for `proxy version` output.
+
 ## [1.2.0] - 2026-07-01
 
 ### Added
@@ -66,6 +75,7 @@ If you previously ran `proxy on` and want the old persistent behavior, run `prox
 - Default HTTP/SOCKS ports match common Clash setups (7890 / 7891); override in `config.env`
 - Compatible with any local HTTP+SOCKS proxy (Clash Verge, Mihomo, legacy CFW, etc.)
 
+[1.3.0]: https://github.com/example/proxy-config/releases/tag/v1.3.0
 [1.2.0]: https://github.com/example/proxy-config/releases/tag/v1.2.0
 [1.1.1]: https://github.com/example/proxy-config/releases/tag/v1.1.1
 [1.1.0]: https://github.com/example/proxy-config/releases/tag/v1.1.0

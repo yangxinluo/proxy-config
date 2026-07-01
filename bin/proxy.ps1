@@ -35,6 +35,7 @@ function Read-ClashProxyConfig {
         HOST             = ''
         GIT_USE_HTTP     = '1'
         GIT_PROXY_SCHEME = 'http'
+        HEALTH_CHECK_URL = 'http://www.gstatic.com/generate_204'
         STATE_DIR        = ''
     }
 
@@ -307,6 +308,104 @@ function Clear-ClashProxyState {
     if (Test-Path $stateFile) { Remove-Item $stateFile -Force }
 }
 
+function Get-ClashProxyVersion {
+    $versionFile = Join-Path (Get-ClashProxyRoot) 'VERSION'
+    if (Test-Path $versionFile) {
+        return (Get-Content $versionFile -Raw).Trim()
+    }
+    return 'unknown'
+}
+
+function Show-ProxyHelp {
+    @'
+usage: proxy {on|off|status|toggle|version|help} [options]
+
+commands:
+  on       Enable proxy (session by default)
+  off      Disable proxy
+  status   Show proxy status
+  toggle   Switch between on and off
+  version  Print version
+  help     Show this help
+
+options:
+  -g, --global, -Global   Persist settings across terminals
+  --git-only, -GitOnly    Configure Git proxy only
+  --json                  Machine-readable status output (status only)
+'@ | Write-Host
+}
+
+function Test-ClashProxyPort {
+    param(
+        [string]$HostAddr,
+        [int]$Port
+    )
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $async = $client.BeginConnect($HostAddr, $Port, $null, $null)
+        $ok = $async.AsyncWaitHandle.WaitOne(2000, $false)
+        if ($ok -and $client.Connected) {
+            $client.Close()
+            return $true
+        }
+        $client.Close()
+    } catch {}
+    return $false
+}
+
+function Test-ClashProxyHealth {
+    param(
+        [hashtable]$Config,
+        [string]$HttpUrl
+    )
+    if (-not $Config.HEALTH_CHECK_URL) {
+        return 'skipped'
+    }
+    try {
+        $response = Invoke-WebRequest -Uri $Config.HEALTH_CHECK_URL `
+            -Proxy $HttpUrl -TimeoutSec 3 -UseBasicParsing
+        return "ok (HTTP $($response.StatusCode))"
+    } catch {
+        return 'unreachable'
+    }
+}
+
+function Get-ClashProxyStatusJson {
+    param(
+        [hashtable]$Config,
+        [string]$HostAddr,
+        [string]$HttpUrl,
+        [hashtable]$State
+    )
+    $displayScope = 'off'
+    if ($env:CLASH_PROXY_SCOPE) {
+        $displayScope = $env:CLASH_PROXY_SCOPE
+    } elseif ($State.scope -eq 'global') {
+        $displayScope = 'global'
+    } elseif ($env:HTTP_PROXY -or $env:http_proxy -or $env:GIT_HTTP_PROXY) {
+        $displayScope = 'session'
+    }
+
+    $gitHttp = git config --global --get http.proxy 2>$null
+    $portOpen = Test-ClashProxyPort -HostAddr $hostAddr -Port ([int]$Config.HTTP_PORT)
+    $health = Test-ClashProxyHealth -Config $Config -HttpUrl $httpUrl
+
+    [ordered]@{
+        version     = Get-ClashProxyVersion
+        platform    = 'powershell'
+        host        = $hostAddr
+        http_port   = [int]$Config.HTTP_PORT
+        socks_port  = [int]$Config.SOCKS_PORT
+        scope       = $displayScope
+        mode        = $State.mode
+        session_env = [bool]($env:HTTP_PROXY -or $env:http_proxy)
+        git_session = [bool]($env:GIT_HTTP_PROXY -or $env:GIT_HTTPS_PROXY)
+        git_global  = [bool]$gitHttp
+        port_open   = $portOpen
+        health      = $health
+    } | ConvertTo-Json -Compress
+}
+
 function Show-ClashProxyGlobalStatus {
     param([string]$StateDir)
 
@@ -331,14 +430,25 @@ function proxy {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0, Mandatory = $true)]
-        [ValidateSet('on', 'off', 'status')]
+        [ValidateSet('on', 'off', 'status', 'toggle', 'version', 'help')]
         [string]$Command,
 
         [Alias('g')]
         [switch]$Global,
 
-        [switch]$GitOnly
+        [switch]$GitOnly,
+
+        [switch]$Json
     )
+
+    if ($Command -eq 'help') {
+        Show-ProxyHelp
+        return
+    }
+    if ($Command -eq 'version') {
+        Write-Output (Get-ClashProxyVersion)
+        return
+    }
 
     $root = Get-ClashProxyRoot
     $config = Read-ClashProxyConfig -Root $root
@@ -346,6 +456,17 @@ function proxy {
     $httpUrl = "http://${hostAddr}:$($config.HTTP_PORT)"
     $socksUrl = "socks5://${hostAddr}:$($config.SOCKS_PORT)"
     $stateDir = $config.STATE_DIR
+
+    if ($Command -eq 'toggle') {
+        $state = Read-ClashProxyState -StateDir $stateDir
+        $isOn = $env:HTTP_PROXY -or $env:http_proxy -or $env:GIT_HTTP_PROXY -or ($state.scope -eq 'global')
+        if ($isOn) {
+            proxy -Command off -Global:$Global -GitOnly:$GitOnly
+        } else {
+            proxy -Command on -Global:$Global -GitOnly:$GitOnly
+        }
+        return
+    }
 
     switch ($Command) {
         'on' {
@@ -428,6 +549,11 @@ function proxy {
         'status' {
             $state = Read-ClashProxyState -StateDir $stateDir
 
+            if ($Json) {
+                Write-Output (Get-ClashProxyStatusJson -Config $config -HostAddr $hostAddr -HttpUrl $httpUrl -State $state)
+                return
+            }
+
             $displayScope = 'off'
             if ($env:CLASH_PROXY_SCOPE) {
                 $displayScope = $env:CLASH_PROXY_SCOPE
@@ -479,13 +605,13 @@ function proxy {
                 Write-Host '  WSL env block: present'
             }
 
-            try {
-                $response = Invoke-WebRequest -Uri 'http://www.gstatic.com/generate_204' `
-                    -Proxy $httpUrl -TimeoutSec 3 -UseBasicParsing
-                Write-Host "  health:      ok (HTTP $($response.StatusCode))"
-            } catch {
-                Write-Host '  health:      unreachable'
+            if (Test-ClashProxyPort -HostAddr $hostAddr -Port ([int]$config.HTTP_PORT)) {
+                Write-Host "  port:        open (TCP $($config.HTTP_PORT))"
+            } else {
+                Write-Host "  port:        closed (TCP $($config.HTTP_PORT))"
             }
+
+            Write-Host "  health:      $(Test-ClashProxyHealth -Config $config -HttpUrl $httpUrl)"
         }
     }
 }
@@ -496,12 +622,15 @@ if ($MyInvocation.InvocationName -ne '.') {
     $gitOnly = $false
     $globalFlag = $false
     $gitGlobalOnly = $false
+    $jsonFlag = $false
     foreach ($arg in $args) {
         switch -Regex ($arg) {
             '^(-GitOnly|--git-only)$' { $gitOnly = $true; continue }
             '^(-g|-Global|--global)$' { $globalFlag = $true; continue }
             '^--git-global-only$' { $gitGlobalOnly = $true; continue }
-            '^(on|off|status)$' { $cmd = $arg; continue }
+            '^--json$' { $jsonFlag = $true; continue }
+            '^(on|off|status|toggle|version|help)$' { $cmd = $arg; continue }
+            '^(-h|--help)$' { $cmd = 'help'; continue }
         }
     }
     if ($gitGlobalOnly -and $cmd -eq 'status') {
@@ -510,5 +639,5 @@ if ($MyInvocation.InvocationName -ne '.') {
         Show-ClashProxyGlobalStatus -StateDir $config.STATE_DIR
         return
     }
-    proxy -Command $cmd -Global:$globalFlag -GitOnly:$gitOnly
+    proxy -Command $cmd -Global:$globalFlag -GitOnly:$gitOnly -Json:$jsonFlag
 }

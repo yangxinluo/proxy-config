@@ -57,3 +57,9 @@ Describe 'Get-ClashProxyHost' {
         Get-ClashProxyHost -Config $config | Should -Be '127.0.0.1'
     }
 }
+
+Describe 'Get-ClashProxyVersion' {
+    It 'reads VERSION file' {
+        Get-ClashProxyVersion | Should -Match '^\d+\.\d+\.\d+$'
+    }
+}

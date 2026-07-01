@@ -24,7 +24,7 @@ _proxy_load_config() {
     fi
     # shellcheck disable=SC1090
     source "$config_file"
-    export HTTP_PORT SOCKS_PORT NO_PROXY GIT_USE_HTTP STATE_DIR HOST GIT_PROXY_SCHEME
+    export HTTP_PORT SOCKS_PORT NO_PROXY GIT_USE_HTTP STATE_DIR HOST GIT_PROXY_SCHEME HEALTH_CHECK_URL
     # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/validate-config.sh"
     validate_clash_proxy_config || return 1
@@ -38,7 +38,11 @@ _proxy_source_libs() {
     # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/persist-env.sh"
     # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/proxy-net.sh"
+    # shellcheck disable=SC1091
     source "${CLASH_PROXY_ROOT}/lib/proxy-core.sh"
+    # shellcheck disable=SC1091
+    source "${CLASH_PROXY_ROOT}/lib/proxy-commands.sh"
 }
 
 _proxy_cli() {
@@ -49,7 +53,7 @@ _proxy_cli() {
     local cmd="${1:-status}"
     shift || true
 
-    local global_flag=0 git_only=0
+    local global_flag=0 git_only=0 json_flag=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -61,8 +65,16 @@ _proxy_cli() {
                 git_only=1
                 shift
                 ;;
+            --json)
+                json_flag=1
+                shift
+                ;;
+            -h|--help)
+                proxy_help
+                return 0
+                ;;
             *)
-                echo "usage: proxy {on|off|status} [-g|--global] [--git-only]" >&2
+                echo "usage: proxy {on|off|status|toggle|version|help} [-g|--global] [--git-only] [--json]" >&2
                 return 1
                 ;;
         esac
@@ -88,10 +100,29 @@ _proxy_cli() {
             fi
             ;;
         status)
-            proxy_status
+            if [[ "$json_flag" -eq 1 ]]; then
+                proxy_status_json
+            else
+                proxy_status
+            fi
+            ;;
+        toggle)
+            if [[ "$git_only" -eq 1 ]]; then
+                proxy_toggle $([[ "$global_flag" -eq 1 ]] && echo --global) --git-only
+            elif [[ "$global_flag" -eq 1 ]]; then
+                proxy_toggle --global
+            else
+                proxy_toggle
+            fi
+            ;;
+        version)
+            proxy_version
+            ;;
+        help|-h|--help)
+            proxy_help
             ;;
         *)
-            echo "usage: proxy {on|off|status} [-g|--global] [--git-only]" >&2
+            echo "usage: proxy {on|off|status|toggle|version|help} [-g|--global] [--git-only] [--json]" >&2
             return 1
             ;;
     esac

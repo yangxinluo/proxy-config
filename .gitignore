@@ -19,3 +19,7 @@ desktop.ini
 
 # State (user-local, not part of repo)
 .local/
+
+# Test output
+testResults.xml
+Pester*.xml
